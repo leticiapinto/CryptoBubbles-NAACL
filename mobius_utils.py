@@ -1,3 +1,7 @@
+'''
+Methods borrowed from https://github.com/ferrine/hyrnn
+'''
+
 import torch
 import geoopt.manifolds.poincare.math as pmath
 
