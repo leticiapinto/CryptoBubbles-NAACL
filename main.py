@@ -480,4 +480,12 @@ def test_model(model, criterion, ce_criterion):
                   f'\n Accu (Span): {results["acc_span"]:.4f} \t Precision (Span): {results["precision_span"]:.4f} \t Recall (Span): {results["recall_span"]:.4f} \t F1 (Span): {results["f1_span"]:.4f} '
                   f'\n Acc (Bubble): {results["acc_bubble"]:.4f} \t Precision (Bubble): {results["precision_nbubble"]:.4f} \t Recall (Bubble): {results["recall_nbubble"]:.4f} \t F1 (Bubble): {results["f1_nbubble"]:.4f}')
 
-train_model(criterion1, criterion2, num_epochs)
+
+
+### Driver code
+
+# Run training and validation for MBHN
+model = train_model(criterion1, criterion2, num_epochs)
+
+# Run the trained model on zero-shot test data
+test_model(model, criterion1, criterion2)
