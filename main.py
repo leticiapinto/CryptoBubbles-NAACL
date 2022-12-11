@@ -147,8 +147,12 @@ logging.info(
 data_used = {
     "train": [f"train_data_price_only_lookback_{num_lookback}_lookahead_{args.num_lookahead}_stride_{args.stride}.pkl",
               f"train_data_text_only_lookback_{num_lookback}_lookahead_{args.num_lookahead}_stride_{args.stride}.pkl"],
+
     "val":  [f"val_data_price_only_lookback_{num_lookback}_lookahead_{args.num_lookahead}_stride_{args.stride}.pkl",
-              f"val_data_text_only_lookback_{num_lookback}_lookahead_{args.num_lookahead}_stride_{args.stride}.pkl"]
+              f"val_data_text_only_lookback_{num_lookback}_lookahead_{args.num_lookahead}_stride_{args.stride}.pkl"],
+
+    "test": [f"test_data_price_only_lookback_{num_lookback}_lookahead_{args.num_lookahead}_stride_{args.stride}.pkl",
+              f"test_data_text_only_lookback_{num_lookback}_lookahead_{args.num_lookahead}_stride_{args.stride}.pkl"]
 }
 
 print('train: price_data_path: ', data_used["train"][0], ', embed_folder_path: ', data_used["train"][1])
@@ -165,6 +169,12 @@ valset = BubbleDatav2(
     price_data_path=data_used["val"][0],
     load_embeds=load_embeds,
     embed_folder_path=data_used["val"][1],
+)
+
+testset = BubbleDatav2(
+    price_data_path=data_used["test"][0],
+    load_embeds=load_embeds,
+    embed_folder_path=data_used["test"][1],
 )
 
 if args.do_sampling:
@@ -185,10 +195,16 @@ else:
         num_workers=2,
         drop_last=True,
     )
+
 valloader = DataLoader(
     valset, batch_size=batch_size, shuffle=False, num_workers=2, drop_last=True
 )
-dataloaders = {"train": trainloader, "val": valloader}
+
+testloader = DataLoader(
+    testset, batch_size=batch_size, shuffle=False, num_workers=2, drop_last=True
+)
+
+dataloaders = {"train": trainloader, "val": valloader, "test": testloader}
 
 if args.data == "price":
     maxlen = num_lookback
@@ -199,7 +215,7 @@ model = MobiusEncDecGRUAttn(input_dim, hidden_dim,
                             num_span_classes, out_dim=2, num_days=num_days, maxlen=maxlen)
 model.cuda()
 
-dataset_sizes = {"train": len(trainset), "val": len(valset)}
+dataset_sizes = {"train": len(trainset), "val": len(valset), "test": len(testset)}
 
 if args.focal_loss:
     criterion1 = FocalLoss(alpha=2, gamma=5)
