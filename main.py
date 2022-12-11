@@ -147,8 +147,12 @@ logging.info(
 data_used = {
     "train": [f"train_data_price_only_lookback_{num_lookback}_lookahead_{args.num_lookahead}_stride_{args.stride}.pkl",
               f"train_data_text_only_lookback_{num_lookback}_lookahead_{args.num_lookahead}_stride_{args.stride}.pkl"],
+
     "val":  [f"val_data_price_only_lookback_{num_lookback}_lookahead_{args.num_lookahead}_stride_{args.stride}.pkl",
-              f"val_data_text_only_lookback_{num_lookback}_lookahead_{args.num_lookahead}_stride_{args.stride}.pkl"]
+              f"val_data_text_only_lookback_{num_lookback}_lookahead_{args.num_lookahead}_stride_{args.stride}.pkl"],
+
+    "test": [f"test_data_price_only_lookback_{num_lookback}_lookahead_{args.num_lookahead}_stride_{args.stride}.pkl",
+              f"test_data_text_only_lookback_{num_lookback}_lookahead_{args.num_lookahead}_stride_{args.stride}.pkl"]
 }
 
 print('train: price_data_path: ', data_used["train"][0], ', embed_folder_path: ', data_used["train"][1])
@@ -165,6 +169,12 @@ valset = BubbleDatav2(
     price_data_path=data_used["val"][0],
     load_embeds=load_embeds,
     embed_folder_path=data_used["val"][1],
+)
+
+testset = BubbleDatav2(
+    price_data_path=data_used["test"][0],
+    load_embeds=load_embeds,
+    embed_folder_path=data_used["test"][1],
 )
 
 if args.do_sampling:
@@ -185,10 +195,16 @@ else:
         num_workers=2,
         drop_last=True,
     )
+
 valloader = DataLoader(
     valset, batch_size=batch_size, shuffle=False, num_workers=2, drop_last=True
 )
-dataloaders = {"train": trainloader, "val": valloader}
+
+testloader = DataLoader(
+    testset, batch_size=batch_size, shuffle=False, num_workers=2, drop_last=True
+)
+
+dataloaders = {"train": trainloader, "val": valloader, "test": testloader}
 
 if args.data == "price":
     maxlen = num_lookback
@@ -199,7 +215,7 @@ model = MobiusEncDecGRUAttn(input_dim, hidden_dim,
                             num_span_classes, out_dim=2, num_days=num_days, maxlen=maxlen)
 model.cuda()
 
-dataset_sizes = {"train": len(trainset), "val": len(valset)}
+dataset_sizes = {"train": len(trainset), "val": len(valset), "test": len(testset)}
 
 if args.focal_loss:
     criterion1 = FocalLoss(alpha=2, gamma=5)
@@ -234,6 +250,7 @@ def train_model(criterion, ce_criterion, num_epochs=25):
         true_bubble_list = []
         num_bubble_true_list = []
         num_bubble_pred_list = []
+
         # Each epoch has a training and validation phase
         for phase in ["train", "val"]:
             if phase == "train":
@@ -243,9 +260,7 @@ def train_model(criterion, ce_criterion, num_epochs=25):
 
             running_loss = 0.0
             running_corrects = 0
-            for batch_data in dataloaders[
-                phase
-            ]:
+            for batch_data in dataloaders[phase]:
                 if args.data == "price":
                     inputs = batch_data[0].unsqueeze(
                         -1).to(torch.float).to(device)
@@ -387,5 +402,90 @@ def train_model(criterion, ce_criterion, num_epochs=25):
     )
     return model
 
+def test_model(model, criterion, ce_criterion):
 
-train_model(criterion1, criterion2, num_epochs)
+    start_idx_true_list, start_idx_pred_list = [], []
+    end_idx_true_list, end_idx_pred_list = [], []
+    true_bubble_list = []
+    num_bubble_true_list, num_bubble_pred_list = [], []
+
+    results_dict = { "test": [] }
+    running_loss = 0.0
+
+    for batch_data in dataloaders["test"]:
+        if args.data == "price":
+            inputs = batch_data[0].unsqueeze(
+                -1).to(torch.float).to(device)
+        elif args.data == "text":
+            inputs = batch_data[0].to(device).float()
+        else:
+            raise NotImplementedError
+
+        if len(batch_data) > 5:
+            len_feats = batch_data[6]
+        else:
+            len_feats = (torch.ones(size=(batch_size, 1))
+                         * num_lookback).squeeze(-1)
+
+        start_idx = batch_data[1].to(device).float()
+        end_idx = batch_data[2].to(device).float()
+        start_idx = start_idx[:, :num_days]
+        end_idx = end_idx[:, :num_days]
+        end_idx[:, -1] = end_idx[:, -1] + \
+            (1 - ((torch.sum(start_idx, dim=1) == torch.sum(end_idx, dim=1)).int()))
+        num_bubbles = torch.sum(start_idx, dim=1).long()
+        true_bubble = batch_data[4]
+        true_bubble = true_bubble[:, :num_days]
+
+        optimizer.zero_grad()
+
+        with torch.set_grad_enabled(False):
+            num_bubbles_preds, outputs = model(inputs, len_feats)
+            start_preds = outputs[:, :, 0]
+            end_preds = outputs[:, :, 1]
+
+            loss1 = criterion(start_preds, start_idx)
+            loss2 = criterion(end_preds, end_idx)
+            loss3 = ce_criterion(num_bubbles_preds, num_bubbles)
+
+            loss = loss1 + loss2 + loss3
+
+
+            print(f"Batch Loss: {loss}")
+
+            true_bubble_list.append(true_bubble)
+            start_idx_pred_list.append(start_preds)
+            end_idx_pred_list.append(end_preds)
+            num_bubble_true_list.append(num_bubbles)
+            num_bubble_pred_list.append(num_bubbles_preds)
+
+            running_loss += loss.item() * inputs.size(0)
+
+            results = summarize_results(
+                true_bubble_list,
+                start_idx_pred_list,
+                end_idx_pred_list,
+                num_bubble_true_list,
+                num_bubble_pred_list,
+            )
+            results_dict["test"].append(results)
+
+            logging.info(f'Testing results \n'
+                         f' Loss: {running_loss:.4f} \t MCC: {results["MCC"]:.4f} \t EM: {results["EM"]:.4f} EM (only_bubble): {results["EM_only_bubble"]:.4f} '
+                         f'\n Accu (Span): {results["acc_span"]:.4f} \t Precision (Span): {results["precision_span"]:.4f} \t Recall (Span): {results["recall_span"]:.4f} \t F1 (Span): {results["f1_span"]:.4f} '
+                         f'\n Acc (Bubble): {results["acc_bubble"]:.4f} \t Precision (Bubble): {results["precision_nbubble"]:.4f} \t Recall (Bubble): {results["recall_nbubble"]:.4f} \t F1 (Bubble): {results["f1_nbubble"]:.4f}')
+
+            print(f'Testing results \n'
+                  f' Loss: {running_loss:.4f} \t MCC: {results["MCC"]:.4f} \t EM: {results["EM"]:.4f} EM (only_bubble): {results["EM_only_bubble"]:.4f} '
+                  f'\n Accu (Span): {results["acc_span"]:.4f} \t Precision (Span): {results["precision_span"]:.4f} \t Recall (Span): {results["recall_span"]:.4f} \t F1 (Span): {results["f1_span"]:.4f} '
+                  f'\n Acc (Bubble): {results["acc_bubble"]:.4f} \t Precision (Bubble): {results["precision_nbubble"]:.4f} \t Recall (Bubble): {results["recall_nbubble"]:.4f} \t F1 (Bubble): {results["f1_nbubble"]:.4f}')
+
+
+
+### Driver code
+
+# Run training and validation for MBHN
+model = train_model(criterion1, criterion2, num_epochs)
+
+# Run the trained model on zero-shot test data
+test_model(model, criterion1, criterion2)
