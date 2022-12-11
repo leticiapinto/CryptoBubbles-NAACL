@@ -250,6 +250,7 @@ def train_model(criterion, ce_criterion, num_epochs=25):
         true_bubble_list = []
         num_bubble_true_list = []
         num_bubble_pred_list = []
+
         # Each epoch has a training and validation phase
         for phase in ["train", "val"]:
             if phase == "train":
@@ -259,9 +260,7 @@ def train_model(criterion, ce_criterion, num_epochs=25):
 
             running_loss = 0.0
             running_corrects = 0
-            for batch_data in dataloaders[
-                phase
-            ]:
+            for batch_data in dataloaders[phase]:
                 if args.data == "price":
                     inputs = batch_data[0].unsqueeze(
                         -1).to(torch.float).to(device)
