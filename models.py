@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import geoopt.manifolds.poincare.math as pmath_geo
 #from mobius.mobius_gru import MobiusGRU
-
+from hyrnn_gru import MobiusGRU
 
 class LSTMEncoder(nn.Module):
     def __init__(self, input_dim, hid_dim):
@@ -261,8 +261,8 @@ class FullModelV1(nn.Module):
         self.no_time    = no_time
         self.hid_dim    = hid_dim
         self.device     = torch.device("cuda:0")
-        #self.rnn = MobiusGRU(input_dim, hid_dim)
-        self.rnn        = nn.GRU(input_dim, hid_dim)
+        self.rnn = MobiusGRU(input_dim, hid_dim)
+        #self.rnn        = nn.GRU(input_dim, hid_dim)
         self.c          = torch.tensor([1.0]).to(self.device)
         self.tanh       = nn.Tanh()
         self.decoder    = DecoderGRU(
@@ -345,8 +345,8 @@ class MobiusEncDecGRU(nn.Module):
         self.input_dim = input_dim
         self.c = torch.tensor([1.0]).cuda()
 
-        #self.enc = MobiusGRU(input_dim, hid_dim)
-        self.enc = nn.GRU(input_dim, hid_dim)
+        self.enc = MobiusGRU(input_dim, hid_dim)
+        #self.enc = nn.GRU(input_dim, hid_dim)
         self.dec = nn.GRUCell(input_dim, hid_dim)
 
         self.fc_in = nn.Linear(hid_dim, input_dim)
@@ -391,8 +391,8 @@ class MobiusEncDecGRUAttn(nn.Module):
         self.input_dim = input_dim
         self.c = torch.tensor([1.0]).cuda()
 
-        #self.enc = MobiusGRU(input_dim, hid_dim)
-        self.enc = nn.GRU(input_dim, hid_dim)
+        self.enc = MobiusGRU(input_dim, hid_dim)
+        #self.enc = nn.GRU(input_dim, hid_dim)
         
         self.dec = nn.GRUCell(input_dim, hid_dim)
         self.attn = SimpleAttn(hid_dim, maxlen=maxlen, use_attention=True)
