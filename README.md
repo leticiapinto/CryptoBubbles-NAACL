@@ -31,7 +31,7 @@ Through quantitative, qualitative, and zero-shot analyses on Reddit and Twitter 
 ```
 
 ## Environment & Installation Steps
-Installing conda environment
+Installing conda environment to cover the necessary dependencies
 
 ```python
 conda env create -f environment.yml
@@ -41,7 +41,7 @@ conda env create -f environment.yml
 
 Download the dataset from [here](https://zenodo.org/record/6556673#.Yq4UIOxBy3I) and unzip all the three folders.
 
-### Generate data from raw data
+### Generate data from raw data (Preprocessing section)
 
 ```python
 python make_price_data.py
@@ -54,8 +54,8 @@ Similarly, make data for `val` and `test` split.
 
 ## Run
 
-Execute the following python command to train MBHN: 
+Execute the following python command to train MBHN: (This automatically will validate and test set)
 ```python
 python main.py --do_sampling --focal_loss
 ```
-
+We used a pretrained BERT for the encoder part and the MBHN model is training from scratch
